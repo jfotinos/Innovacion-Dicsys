@@ -1,0 +1,124 @@
+:root {
+  --bg: #f2efe8;
+  --paper: #fffaf2;
+  --ink: #27211d;
+  --accent: #df5a2b;
+  --accent-2: #2d7f73;
+  --line: #ddd3c5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 15% 10%, #ffd9be 0%, transparent 45%),
+    radial-gradient(circle at 85% 0%, #c5efe6 0%, transparent 40%),
+    var(--bg);
+}
+
+.layout {
+  width: min(1200px, 94vw);
+  margin: 2rem auto 4rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.hero {
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, #fff 0%, var(--paper) 100%);
+  border-radius: 18px;
+}
+
+h1, h2 {
+  margin: 0 0 0.5rem;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  background: rgba(255, 250, 242, 0.92);
+  backdrop-filter: blur(2px);
+  border-radius: 18px;
+  padding: 1rem;
+}
+
+.form-panel label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+}
+
+input, textarea, button {
+  font: inherit;
+}
+
+input, textarea {
+  width: 100%;
+  padding: 0.7rem;
+  border-radius: 10px;
+  border: 1px solid #c5baab;
+  background: #fffcf7;
+}
+
+textarea {
+  min-height: 280px;
+  resize: vertical;
+}
+
+.grid-2 {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.8rem;
+}
+
+.actions {
+  margin-top: 0.8rem;
+  display: flex;
+  gap: 0.6rem;
+}
+
+button {
+  border: 0;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+}
+
+button.secondary {
+  background: var(--accent-2);
+}
+
+pre {
+  background: #211d1a;
+  color: #ffe9d1;
+  padding: 0.8rem;
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.trace-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.trace-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed #cfbfa9;
+}
+
+@media (max-width: 920px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

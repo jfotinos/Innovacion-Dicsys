@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SQL Traceability Rewriter</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="layout">
+    <section class="hero">
+      <h1>SQL Traceability Rewriter</h1>
+      <p>BigQuery-first, sin IA. Reescribe columnas y agrega condiciones WHERE con politica AND.</p>
+    </section>
+
+    <section class="panel form-panel">
+      <label for="title">Nombre de la traza</label>
+      <input id="title" type="text" placeholder="Ej: traza_clientes_v3">
+
+      <div class="grid-2">
+        <div>
+          <label for="baseSql">Query base</label>
+          <textarea id="baseSql" placeholder="SELECT ..."></textarea>
+        </div>
+        <div>
+          <label for="refSql">Query / Proceso de referencia</label>
+          <textarea id="refSql" placeholder="CREATE TEMP TABLE ...; SELECT ...;"></textarea>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="previewBtn">Vista previa</button>
+        <button id="saveBtn" class="secondary">Guardar traza</button>
+      </div>
+      <p id="status"></p>
+    </section>
+
+    <section class="panel output-panel">
+      <h2>Query reescrita</h2>
+      <pre id="outputSql"></pre>
+      <h2>Reporte de cambios</h2>
+      <pre id="report"></pre>
+    </section>
+
+    <section class="panel">
+      <h2>Trazas recientes</h2>
+      <ul class="trace-list">
+        {% for item in recent %}
+          <li>#{{ item.id }} - {{ item.title }} - {{ item.created_at }}</li>
+        {% else %}
+          <li>No hay trazas guardadas todavia.</li>
+        {% endfor %}
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    const titleEl = document.getElementById('title');
+    const baseEl = document.getElementById('baseSql');
+    const refEl = document.getElementById('refSql');
+    const outputEl = document.getElementById('outputSql');
+    const reportEl = document.getElementById('report');
+    const statusEl = document.getElementById('status');
+
+    async function run(endpoint) {
+      statusEl.textContent = 'Procesando...';
+      const payload = {
+        title: titleEl.value || 'Sin titulo',
+        base_sql: baseEl.value,
+        reference_sql: refEl.value,
+      };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        statusEl.textContent = 'Error: ' + (data.detail || 'No se pudo procesar');
+        return;
+      }
+
+      outputEl.textContent = data.output_sql;
+      reportEl.textContent = JSON.stringify(data.report, null, 2);
+      statusEl.textContent = endpoint.includes('trace-runs')
+        ? 'Traza guardada correctamente.'
+        : 'Vista previa generada.';
+
+      if (endpoint.includes('trace-runs')) {
+        setTimeout(() => window.location.reload(), 500);
+      }
+    }
+
+    document.getElementById('previewBtn').addEventListener('click', () => run('/api/rewrite'));
+    document.getElementById('saveBtn').addEventListener('click', () => run('/api/trace-runs'));
+  </script>
+</body>
+</html>
