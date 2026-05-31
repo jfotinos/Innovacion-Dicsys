@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Traza #{{ trace.id }} - SQL Traceability Rewriter</title>
+  <script>
+    (function() {
+      let storedTheme = null;
+      try {
+        storedTheme = localStorage.getItem('theme');
+      } catch (err) {
+        storedTheme = null;
+      }
+
+      if (storedTheme === 'dark' || storedTheme === 'light') {
+        document.documentElement.setAttribute('data-theme', storedTheme);
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body data-page="detail">
+  <main class="layout">
+    <section class="hero">
+      <div class="section-title">
+        <div>
+          <h1>{{ trace.title }}</h1>
+          <p>Traza #{{ trace.id }} creada el {{ trace.created_at }}.</p>
+        </div>
+        <a class="button-link primary" href="/">Volver al inicio</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <h2>Reporte</h2>
+        <p>Resumen de los cambios aplicados.</p>
+      </div>
+      <pre>{{ trace_report | tojson(indent=2) }}</pre>
+    </section>
+
+    <section class="panel form-panel">
+      <div class="grid-2">
+        <div>
+          <label>Query base</label>
+          <pre>{{ trace.base_sql }}</pre>
+        </div>
+        <div>
+          <label>Query / Proceso de referencia</label>
+          <pre>{{ trace.reference_sql }}</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel output-panel">
+      <div class="section-title">
+        <h2>Query reescrita</h2>
+        <p>Versión final persistida.</p>
+      </div>
+      <pre>{{ trace.output_sql }}</pre>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <h2>Trazas recientes</h2>
+        <p>Seguimiento de las corridas guardadas.</p>
+      </div>
+      <ul class="trace-list">
+        {% for item in recent %}
+          <li>
+            <div class="trace-meta">
+              <strong>#{{ item.id }} - {{ item.title }}</strong>
+              <span>{{ item.created_at }}</span>
+            </div>
+            <a class="button-link" href="/trace-runs/{{ item.id }}">Ver detalle</a>
+          </li>
+        {% else %}
+          <li>No hay trazas guardadas todavia.</li>
+        {% endfor %}
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

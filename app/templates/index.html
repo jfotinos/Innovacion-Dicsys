@@ -4,27 +4,50 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SQL Traceability Rewriter</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    (function() {
+      let storedTheme = null;
+      try {
+        storedTheme = localStorage.getItem('theme');
+      } catch (err) {
+        storedTheme = null;
+      }
+
+      if (storedTheme === 'dark' || storedTheme === 'light') {
+        document.documentElement.setAttribute('data-theme', storedTheme);
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 <body>
   <main class="layout">
     <section class="hero">
-      <h1>SQL Traceability Rewriter</h1>
-      <p>BigQuery-first, sin IA. Reescribe columnas y agrega condiciones WHERE con politica AND.</p>
+      <div class="section-title">
+        <div>
+          <h1>SQL Traceability Rewriter</h1>
+          <p>BigQuery-first, sin IA. Reescribe columnas, FROM y filtros con reglas deterministicas.</p>
+        </div>
+        <button class="button-link primary" type="button" id="themeToggle">Modo oscuro</button>
+      </div>
     </section>
 
-    <section class="panel form-panel">
-      <label for="title">Nombre de la traza</label>
-      <input id="title" type="text" placeholder="Ej: traza_clientes_v3">
-
-      <div class="grid-2">
+    <section class="panel form-panel" id="editor">
+      <div class="stack">
         <div>
-          <label for="baseSql">Query base</label>
-          <textarea id="baseSql" placeholder="SELECT ..."></textarea>
+          <label for="title">Nombre de la traza</label>
+          <input id="title" type="text" placeholder="Ej: traza_clientes_v3">
         </div>
-        <div>
-          <label for="refSql">Query / Proceso de referencia</label>
-          <textarea id="refSql" placeholder="CREATE TEMP TABLE ...; SELECT ...;"></textarea>
+
+        <div class="grid-2">
+          <div>
+            <label for="baseSql">Query base</label>
+            <textarea id="baseSql" placeholder="SELECT ..."></textarea>
+          </div>
+          <div>
+            <label for="refSql">Query / Proceso de referencia</label>
+            <textarea id="refSql" placeholder="CREATE TEMP TABLE ...; SELECT ...;"></textarea>
+          </div>
         </div>
       </div>
 
@@ -32,21 +55,40 @@
         <button id="previewBtn">Vista previa</button>
         <button id="saveBtn" class="secondary">Guardar traza</button>
       </div>
-      <p id="status"></p>
+      <p class="status-line" id="status"></p>
     </section>
 
     <section class="panel output-panel">
-      <h2>Query reescrita</h2>
-      <pre id="outputSql"></pre>
-      <h2>Reporte de cambios</h2>
-      <pre id="report"></pre>
+      <div class="section-title">
+        <h2>Resultado</h2>
+        <p>Vista previa de la query reescrita y el reporte.</p>
+      </div>
+      <div class="stack">
+        <div>
+          <label>Query reescrita</label>
+          <pre id="outputSql"></pre>
+        </div>
+        <div>
+          <label>Reporte de cambios</label>
+          <pre id="report"></pre>
+        </div>
+      </div>
     </section>
 
     <section class="panel">
-      <h2>Trazas recientes</h2>
+      <div class="section-title">
+        <h2>Trazas recientes</h2>
+        <p>Accedé al detalle de cada corrida guardada.</p>
+      </div>
       <ul class="trace-list">
         {% for item in recent %}
-          <li>#{{ item.id }} - {{ item.title }} - {{ item.created_at }}</li>
+          <li>
+            <div class="trace-meta">
+              <strong>#{{ item.id }} - {{ item.title }}</strong>
+              <span>{{ item.created_at }}</span>
+            </div>
+            <a class="button-link" href="/trace-runs/{{ item.id }}">Ver detalle</a>
+          </li>
         {% else %}
           <li>No hay trazas guardadas todavia.</li>
         {% endfor %}
@@ -61,6 +103,39 @@
     const outputEl = document.getElementById('outputSql');
     const reportEl = document.getElementById('report');
     const statusEl = document.getElementById('status');
+    const themeToggle = document.getElementById('themeToggle');
+    const themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+
+    function getStoredTheme() {
+      try {
+        return localStorage.getItem('theme');
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      if (document.body) {
+        document.body.setAttribute('data-theme', theme);
+      }
+    }
+
+    function getActiveTheme() {
+      const htmlTheme = document.documentElement.getAttribute('data-theme');
+      const bodyTheme = document.body ? document.body.getAttribute('data-theme') : null;
+      const storedTheme = htmlTheme || bodyTheme;
+      if (storedTheme === 'dark' || storedTheme === 'light') {
+        return storedTheme;
+      }
+      return themeMedia.matches ? 'dark' : 'light';
+    }
+
+    function updateThemeToggle() {
+      const activeTheme = getActiveTheme();
+      themeToggle.textContent = activeTheme === 'dark' ? 'Modo claro' : 'Modo oscuro';
+      themeToggle.setAttribute('aria-pressed', activeTheme === 'dark');
+    }
 
     async function run(endpoint) {
       statusEl.textContent = 'Procesando...';
@@ -96,6 +171,30 @@
 
     document.getElementById('previewBtn').addEventListener('click', () => run('/api/rewrite'));
     document.getElementById('saveBtn').addEventListener('click', () => run('/api/trace-runs'));
+
+    const bootTheme = document.documentElement.getAttribute('data-theme') || getStoredTheme();
+    if (bootTheme === 'dark' || bootTheme === 'light') {
+      applyTheme(bootTheme);
+    }
+
+    themeToggle.addEventListener('click', () => {
+      const nextTheme = getActiveTheme() === 'dark' ? 'light' : 'dark';
+      applyTheme(nextTheme);
+      try {
+        localStorage.setItem('theme', nextTheme);
+      } catch (err) {
+        // ignore storage errors
+      }
+      updateThemeToggle();
+    });
+
+    themeMedia.addEventListener('change', () => {
+      if (!document.documentElement.hasAttribute('data-theme')) {
+        updateThemeToggle();
+      }
+    });
+
+    updateThemeToggle();
   </script>
 </body>
 </html>

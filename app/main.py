@@ -36,6 +36,18 @@ def home(request: Request, db: Session = Depends(get_db)):
     )
 
 
+def _trace_to_response(trace: TraceRun) -> TraceRunResponse:
+    return TraceRunResponse(
+        id=trace.id,
+        title=trace.title,
+        base_sql=trace.base_sql,
+        reference_sql=trace.reference_sql,
+        output_sql=trace.output_sql,
+        report=json.loads(trace.report_json),
+        created_at=trace.created_at,
+    )
+
+
 @app.post("/api/rewrite", response_model=RewritePreviewResponse)
 def rewrite_preview(payload: TraceRunRequest):
     try:
@@ -64,29 +76,39 @@ def create_trace_run(payload: TraceRunRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(trace)
 
-    return TraceRunResponse(
-        id=trace.id,
-        title=trace.title,
-        base_sql=trace.base_sql,
-        reference_sql=trace.reference_sql,
-        output_sql=trace.output_sql,
-        report=json.loads(trace.report_json),
-        created_at=trace.created_at,
-    )
+    return _trace_to_response(trace)
 
 
 @app.get("/api/trace-runs", response_model=list[TraceRunResponse])
 def list_trace_runs(db: Session = Depends(get_db)):
     records = db.query(TraceRun).order_by(TraceRun.id.desc()).limit(100).all()
     return [
-        TraceRunResponse(
-            id=record.id,
-            title=record.title,
-            base_sql=record.base_sql,
-            reference_sql=record.reference_sql,
-            output_sql=record.output_sql,
-            report=json.loads(record.report_json),
-            created_at=record.created_at,
-        )
+        _trace_to_response(record)
         for record in records
     ]
+
+
+@app.get("/api/trace-runs/{trace_id}", response_model=TraceRunResponse)
+def get_trace_run(trace_id: int, db: Session = Depends(get_db)):
+    trace = db.get(TraceRun, trace_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="Traza no encontrada")
+    return _trace_to_response(trace)
+
+
+@app.get("/trace-runs/{trace_id}", response_class=HTMLResponse)
+def trace_detail(trace_id: int, request: Request, db: Session = Depends(get_db)):
+    trace = db.get(TraceRun, trace_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="Traza no encontrada")
+
+    recent = db.query(TraceRun).order_by(TraceRun.id.desc()).limit(20).all()
+    return templates.TemplateResponse(
+        "detail.html",
+        {
+            "request": request,
+            "trace": trace,
+            "trace_report": json.loads(trace.report_json),
+            "recent": recent,
+        },
+    )
