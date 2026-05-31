@@ -1,139 +1,141 @@
 # SQL Traceability Rewriter (BigQuery-first)
 
-Aplicacion web en Python para automatizar trazabilidad SQL sin IA.
+Aplicacion web en Python para automatizar trazabilidad SQL sin IA, enfocada en BigQuery y en procesos multi-step.
 
-La app toma una query base y una query/proceso de referencia, aplica reglas deterministicas de reescritura y devuelve:
+La app toma:
+
+- Query base (la query que hoy consume una tabla intermedia).
+- SQL de referencia (el proceso o query que genera esa tabla).
+
+Luego aplica reglas deterministicas para reescribir la query base hacia un nivel mas bajo (cercano al origen) y devuelve:
 
 - Query resultante.
-- Reporte de cambios aplicados.
-- Registro opcional en base SQLite para documentar trazas.
+- Reporte estructurado de cambios.
+- Registro opcional en SQLite para documentacion.
 
-## Estado actual del proyecto
+## Estado actual
 
-Implementado y funcional en MVP:
+Implementado:
 
 - Backend API con FastAPI.
-- Motor de trazabilidad SQL basado en AST con SQLGlot.
-- Interfaz web para vista previa y guardado.
+- Motor de trazabilidad basado en AST con SQLGlot.
+- UI web para vista previa, guardado y consulta de trazas.
 - Persistencia en SQLite con SQLAlchemy.
 - Ejecucion local o con Docker Compose.
 
-No implementado todavia:
+En progreso / futuro:
 
-- Reglas de trazabilidad por JOIN.
-- Seguimiento automatico completo de cadena de temporales (grafo de transformaciones).
+- Trazabilidad con JOINs en la query base.
+- Linaje automatico multi-step (grafo de temporales).
 - Traduccion BigQuery -> Oracle.
 
-## Flujo funcional de la app (end-to-end)
+## Flujo general de la app
 
-1. Usuario abre la UI en navegador.
-2. Carga:
-   - Query base (la que quiere mantener y ajustar).
-   - SQL de referencia (puede ser multi-step).
-3. Puede elegir:
-   - Vista previa: recalcula y muestra salida sin persistir.
-   - Guardar traza: recalcula y guarda inputs + output + reporte.
-4. Backend ejecuta motor de reescritura.
-5. UI muestra query reescrita y reporte JSON.
-6. Si se guardo, la corrida aparece en historial de trazas recientes.
+1. El usuario abre la UI.
+2. Ingresa query base y query/proceso de referencia.
+3. El backend ejecuta el motor de trazabilidad.
+4. La UI muestra la query reescrita y el reporte.
+5. Si se guarda, queda en el historial.
 
-## Como funciona la automatizacion de trazabilidad (criterios)
+## Proceso de trazabilidad (reglas exactas)
 
-Esta seccion es la mas importante: describe exactamente en base a que reglas se modifica la query.
+El motor aplica reglas en este orden:
 
-### 1) Parseo estructural (no reemplazo por texto)
+### 1) Parseo estructural (AST)
 
-Se parsean base y referencia a AST SQL. Esto evita errores comunes de find/replace de strings.
+Base y referencia se parsean a AST con SQLGlot. No se hace find/replace de texto plano.
 
-### 2) Seleccion del SELECT de referencia en proceso multi-step
+### 2) Seleccion del SELECT de referencia
 
-Si la referencia contiene varios statements, el motor busca de atras hacia adelante y toma el primer SELECT util que encuentre.
-
-Casos soportados como "SELECT util":
+Si el SQL de referencia tiene multiples statements, se elige el ultimo SELECT util:
 
 - SELECT directo.
 - CREATE ... AS SELECT.
 - INSERT ... SELECT.
 
-Objetivo: usar el ultimo paso relevante del proceso como fuente de verdad para expresar calculos y filtros.
+Esto permite que la referencia sea un proceso multi-step y aun asi se tome la salida final como verdad.
 
-### 3) Criterio de matching de columnas
+### 3) Reemplazo del FROM
 
-Se compara proyeccion por proyeccion entre query base y referencia usando una key logica:
+La query resultante toma el FROM (y JOINs) de la referencia. Esto baja la traza al origen real.
 
-- Primero alias de salida (alias_or_name), en lowercase.
-- Si una proyeccion no tiene alias, se usa su SQL normalizado.
+### 4) Limpieza de proyecto en FROM (caso BigQuery)
 
-En la practica, hoy el comportamiento mas estable es por alias de salida.
+Si el FROM trae un project_id con prefijo `arcor` (ej `arcor-bd-produccion.dataset.tabla`), se elimina el prefijo y se conserva solo `dataset.tabla`.
 
-### 4) Reemplazo de expresiones de columnas
+Ejemplo:
 
-Para cada columna de la query base:
+- Entrada: `FROM arcor-bd-produccion.tablas-bd.tabla1`
+- Salida: `FROM tablas-bd.tabla1`
 
-- Si su key existe en referencia, compara expresion actual vs nueva (normalizadas).
-- Si son distintas, reemplaza la expresion en la base por la de referencia.
-- Si son iguales, no toca nada.
+Respeta alias:
 
-Regla de compatibilidad de salida:
+- `FROM tablas-bd.tabla1 t1`
+- `FROM tablas-bd.tabla1 AS t1`
 
-- Si la columna base ya tenia alias, lo conserva.
-- Si no tenia alias y la nueva expresion es compleja, agrega alias para mantener compatibilidad de nombre de salida.
+### 5) Matching de columnas por alias de salida
 
-### 5) Politica WHERE = AND (con deduplicacion)
+Para reemplazar expresiones del SELECT se usa la key logica:
 
-La query base nunca pierde sus condiciones.
+- alias de salida (alias_or_name), en lowercase.
+- si no hay alias, se usa el SQL normalizado.
 
-Proceso:
+### 6) Reemplazo de expresiones en SELECT
 
-- Se descompone WHERE base y referencia en lista de condiciones por AND.
-- Se normalizan para detectar duplicados.
-- Se agregan solo las condiciones de referencia que no esten ya en base.
-- Se reconstruye WHERE final con AND.
+Si una columna de la base tiene el mismo alias que una de la referencia, se reemplaza su expresion.
 
-Resultado: se conservan filtros originales y se anexan filtros nuevos/relevantes de referencia.
+Regla de compatibilidad:
 
-### 6) Reporte de trazabilidad
+- Si la base ya tiene alias, se conserva.
+- Si no, se agrega alias cuando la nueva expresion es compleja.
 
-El motor entrega un reporte estructurado con:
+### 7) Inline selectivo en WHERE (trazabilidad inversa)
 
-- dialect: dialecto usado (actualmente bigquery).
-- columns_replaced: lista de columnas reemplazadas (from/to).
-- where_conditions_added: condiciones WHERE agregadas.
+Para el caso de **query base con una sola tabla**, se reescriben columnas del WHERE usando la referencia:
 
-Esto permite auditar exactamente que cambio y por que.
+- Si la referencia define la columna como **columna simple**, se reemplaza.
+- Si la referencia define la columna como **expresion compleja o CASE**, no se reemplaza (se evita inyectar CASE en WHERE).
 
-## Ejemplo conceptual
+Esto evita inconsistencias logicas y mantiene el WHERE estable.
 
-Base:
+### 8) Politica WHERE = AND
 
-SELECT
-  id,
-  importe AS total
-FROM ventas
-WHERE estado = 'OK'
+Luego, se combinan condiciones de base y referencia con AND, deduplicando condiciones iguales.
 
-Referencia:
+Resultado: no se pierden filtros originales y se agregan los filtros de la referencia.
 
-CREATE TEMP TABLE t1 AS
-SELECT
-  id,
-  importe * tc AS total
-FROM ventas_stg
-WHERE pais = 'AR';
+### 9) Normalizacion de alias
 
-Salida esperada del motor:
+Se reescriben calificadores de tabla para usar consistentemente el alias final del FROM.
 
-- Reemplaza total: de importe a importe * tc.
-- Mantiene estado = 'OK'.
-- Agrega pais = 'AR'.
-- WHERE final: estado = 'OK' AND pais = 'AR'.
+## Reporte de trazabilidad
 
-## Limites conocidos del MVP
+El motor devuelve un JSON con:
 
-- No resuelve linaje semantico profundo entre tablas intermedias (todavia no sigue automaticamente todo el camino de temporales).
-- No hace analisis de contradiccion logica entre filtros; solo agrega por AND evitando duplicados exactos.
-- No aplica aun reglas especificas sobre JOIN, GROUP BY o HAVING para reconciliacion avanzada.
-- No traduce sintaxis entre motores (BigQuery -> Oracle).
+- `dialect`: dialecto usado (`bigquery`).
+- `columns_replaced`: expresiones reemplazadas en SELECT.
+- `columns_inlined`: columnas de WHERE reemplazadas con columnas simples.
+- `where_inline_skipped`: columnas evitadas en WHERE por expresiones complejas.
+- `unmapped_columns`: columnas de WHERE sin mapeo en la referencia.
+- `where_conditions_added`: condiciones agregadas desde la referencia.
+- `from_replaced`: indica si se reemplazo el FROM.
+- `from_sql`: FROM final de la referencia.
+- `from_project_stripped`: lista de cambios de project_id eliminados.
+
+## Tecnologias y para que se usan
+
+- FastAPI: API web y servidor HTTP.
+- Jinja2: render de HTML para la UI.
+- SQLGlot: parseo y manipulacion de SQL como AST (reescritura segura).
+- SQLAlchemy: persistencia en SQLite.
+- SQLite: almacenamiento local de trazas.
+- Docker: ejecucion contenida y reproducible.
+
+## Limitaciones actuales
+
+- La trazabilidad inversa completa solo esta optimizada para base con una sola tabla.
+- No hay reglas avanzadas para JOIN, GROUP BY o HAVING.
+- No hay traduccion BigQuery -> Oracle.
 
 ## API disponible
 
@@ -153,10 +155,10 @@ Salida esperada del motor:
 ## Estructura principal
 
 - app/main.py: API y rutas web.
-- app/lineage.py: motor de trazabilidad (reglas de reescritura).
+- app/lineage.py: motor de trazabilidad.
 - app/db.py: configuracion DB.
-- app/models.py: modelo de persistencia de corridas.
-- app/templates/index.html: UI principal.
+- app/models.py: modelo de trazas.
+- app/templates/: UI.
 
 ## Ejecutar local
 
@@ -194,7 +196,3 @@ docker compose up --build
 
 - SQLite queda en ./data/traces.db (volumen host).
 - Si borras contenedor, el archivo local conserva historial.
-
-## Proximo paso recomendado
-
-Validar el motor con una query real de tu proceso (base + referencia multi-step), revisar reporte generado y ajustar reglas de matching si aparecen casos ambiguos.
