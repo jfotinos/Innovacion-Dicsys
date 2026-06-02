@@ -18,7 +18,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=3">
+  <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
   <main class="layout">
@@ -66,11 +66,17 @@
       <div class="stack">
         <div>
           <label>Query reescrita</label>
-          <pre id="outputSql"></pre>
+          <div class="code-block">
+            <button class="copy-btn" type="button" data-copy-target="outputSql" aria-label="Copiar query reescrita">Copiar</button>
+            <pre id="outputSql"></pre>
+          </div>
         </div>
         <div>
           <label>Reporte de cambios</label>
-          <pre id="report"></pre>
+          <div class="code-block">
+            <button class="copy-btn" type="button" data-copy-target="report" aria-label="Copiar reporte">Copiar</button>
+            <pre id="report"></pre>
+          </div>
         </div>
       </div>
     </section>
@@ -137,6 +143,61 @@
       themeToggle.setAttribute('aria-pressed', activeTheme === 'dark');
     }
 
+    function setCopyFeedback(button, label, isSuccess) {
+      button.textContent = label;
+      button.classList.toggle('is-copied', isSuccess);
+      if (button.copyTimer) {
+        clearTimeout(button.copyTimer);
+      }
+      button.copyTimer = setTimeout(() => {
+        button.textContent = 'Copiar';
+        button.classList.remove('is-copied');
+      }, 1600);
+    }
+
+    async function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+
+      const helper = document.createElement('textarea');
+      helper.value = text;
+      helper.setAttribute('readonly', '');
+      helper.style.position = 'absolute';
+      helper.style.left = '-9999px';
+      document.body.appendChild(helper);
+      helper.select();
+
+      try {
+        return document.execCommand('copy');
+      } catch (err) {
+        return false;
+      } finally {
+        document.body.removeChild(helper);
+      }
+    }
+
+    function wireCopyButtons() {
+      document.querySelectorAll('[data-copy-target]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const targetId = button.getAttribute('data-copy-target');
+          const target = document.getElementById(targetId);
+          if (!target) {
+            setCopyFeedback(button, 'Error', false);
+            return;
+          }
+          const text = target.textContent || '';
+          if (!text.trim()) {
+            setCopyFeedback(button, 'Vacio', false);
+            return;
+          }
+          const ok = await copyText(text);
+          setCopyFeedback(button, ok ? 'Copiado' : 'Error', ok);
+        });
+      });
+    }
+
     async function run(endpoint) {
       statusEl.textContent = 'Procesando...';
       const payload = {
@@ -195,6 +256,7 @@
     });
 
     updateThemeToggle();
+    wireCopyButtons();
   </script>
 </body>
 </html>

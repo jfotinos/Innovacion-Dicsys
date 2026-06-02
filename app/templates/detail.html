@@ -18,7 +18,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=3">
+  <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body data-page="detail">
   <main class="layout">
@@ -37,18 +37,27 @@
         <h2>Reporte</h2>
         <p>Resumen de los cambios aplicados.</p>
       </div>
-      <pre>{{ trace_report | tojson(indent=2) }}</pre>
+      <div class="code-block">
+        <button class="copy-btn" type="button" data-copy-target="traceReport" aria-label="Copiar reporte">Copiar</button>
+        <pre id="traceReport">{{ trace_report | tojson(indent=2) }}</pre>
+      </div>
     </section>
 
     <section class="panel form-panel">
       <div class="grid-2">
         <div>
           <label>Query base</label>
-          <pre>{{ trace.base_sql }}</pre>
+          <div class="code-block">
+            <button class="copy-btn" type="button" data-copy-target="traceBaseSql" aria-label="Copiar query base">Copiar</button>
+            <pre id="traceBaseSql">{{ trace.base_sql }}</pre>
+          </div>
         </div>
         <div>
           <label>Query / Proceso de referencia</label>
-          <pre>{{ trace.reference_sql }}</pre>
+          <div class="code-block">
+            <button class="copy-btn" type="button" data-copy-target="traceRefSql" aria-label="Copiar query de referencia">Copiar</button>
+            <pre id="traceRefSql">{{ trace.reference_sql }}</pre>
+          </div>
         </div>
       </div>
     </section>
@@ -58,7 +67,10 @@
         <h2>Query reescrita</h2>
         <p>Versión final persistida.</p>
       </div>
-      <pre>{{ trace.output_sql }}</pre>
+      <div class="code-block">
+        <button class="copy-btn" type="button" data-copy-target="traceOutputSql" aria-label="Copiar query reescrita">Copiar</button>
+        <pre id="traceOutputSql">{{ trace.output_sql }}</pre>
+      </div>
     </section>
 
     <section class="panel">
@@ -81,5 +93,60 @@
       </ul>
     </section>
   </main>
+
+  <script>
+    function setCopyFeedback(button, label, isSuccess) {
+      button.textContent = label;
+      button.classList.toggle('is-copied', isSuccess);
+      if (button.copyTimer) {
+        clearTimeout(button.copyTimer);
+      }
+      button.copyTimer = setTimeout(() => {
+        button.textContent = 'Copiar';
+        button.classList.remove('is-copied');
+      }, 1600);
+    }
+
+    async function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+
+      const helper = document.createElement('textarea');
+      helper.value = text;
+      helper.setAttribute('readonly', '');
+      helper.style.position = 'absolute';
+      helper.style.left = '-9999px';
+      document.body.appendChild(helper);
+      helper.select();
+
+      try {
+        return document.execCommand('copy');
+      } catch (err) {
+        return false;
+      } finally {
+        document.body.removeChild(helper);
+      }
+    }
+
+    document.querySelectorAll('[data-copy-target]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const targetId = button.getAttribute('data-copy-target');
+        const target = document.getElementById(targetId);
+        if (!target) {
+          setCopyFeedback(button, 'Error', false);
+          return;
+        }
+        const text = target.textContent || '';
+        if (!text.trim()) {
+          setCopyFeedback(button, 'Vacio', false);
+          return;
+        }
+        const ok = await copyText(text);
+        setCopyFeedback(button, ok ? 'Copiado' : 'Error', ok);
+      });
+    });
+  </script>
 </body>
 </html>

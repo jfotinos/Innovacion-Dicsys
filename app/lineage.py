@@ -123,6 +123,65 @@ def _replace_from_clause(base_select: exp.Select, ref_select: exp.Select, report
     report["from_sql"] = ref_from.sql(dialect=report["dialect"], pretty=False)
 
 
+def _constant_select_aliases(select_stmt: exp.Select) -> set[str]:
+    aliases: set[str] = set()
+    for projection in select_stmt.expressions:
+        if not isinstance(projection, exp.Alias):
+            continue
+
+        alias_name = projection.alias_or_name
+        if not alias_name:
+            continue
+
+        if projection.this.find(exp.Column) is None:
+            aliases.add(alias_name.lower())
+
+    return aliases
+
+
+def _remove_where_on_constant_aliases(base_select: exp.Select, report: dict, dialect: str = "bigquery") -> None:
+    constant_aliases = _constant_select_aliases(base_select)
+    if not constant_aliases:
+        return
+
+    conditions = _where_conditions(base_select)
+    if not conditions:
+        return
+
+    kept: List[exp.Expression] = []
+    removed: List[dict] = []
+
+    for condition in conditions:
+        has_constant_alias = any(
+            column.name.lower() in constant_aliases
+            for column in condition.find_all(exp.Column)
+        )
+
+        if has_constant_alias:
+            removed.append(
+                {
+                    "condition": condition.sql(dialect=dialect),
+                    "reason": "hardcoded_select_alias",
+                }
+            )
+            continue
+
+        kept.append(condition.copy())
+
+    if removed:
+        report["where_conditions_removed"] = removed
+
+    if not kept:
+        base_select.set("where", None)
+        return
+
+    combined: Optional[exp.Expression] = None
+    for condition in kept:
+        combined = condition if combined is None else exp.and_(combined, condition)
+
+    base_select.set("where", exp.Where(this=combined))
+
+
 def _strip_project_from_from_clause(base_select: exp.Select, report: dict, project_prefix: str = "arcor") -> None:
     from_clause = base_select.args.get("from")
     if from_clause is None:
@@ -293,6 +352,7 @@ def rewrite_query(base_sql: str, reference_sql: str, dialect: str = "bigquery") 
         "dialect": dialect,
         "columns_replaced": [],
         "where_conditions_added": [],
+        "where_conditions_removed": [],
         "from_replaced": False,
         "columns_inlined": [],
         "unmapped_columns": [],
@@ -339,6 +399,8 @@ def rewrite_query(base_sql: str, reference_sql: str, dialect: str = "bigquery") 
 
     qualifier_map = _table_qualifier_map(original_base_select, ref_select)
     _normalize_column_qualifiers(base_statement, qualifier_map)
+
+    _remove_where_on_constant_aliases(base_select, report, dialect=dialect)
 
     _combine_where_with_and(base_select, ref_select, report=report, dialect=dialect)
 

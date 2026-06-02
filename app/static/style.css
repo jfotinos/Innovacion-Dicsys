@@ -249,6 +249,35 @@ button.secondary:hover {
   background: var(--accent-2-hover);
 }
 
+.copy-btn {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--button-ghost);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.copy-btn:hover {
+  background: var(--button-ghost-hover);
+  transform: translateY(-1px);
+}
+
+.copy-btn.is-copied {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--accent-shadow);
+}
+
 .button-link,
 .button-link:visited {
   appearance: none;
@@ -308,6 +337,15 @@ pre {
   font-family: var(--font-mono);
   font-size: 0.95rem;
   scrollbar-gutter: stable;
+}
+
+.code-block {
+  position: relative;
+  min-width: 0;
+}
+
+.code-block pre {
+  padding-top: 2.2rem;
 }
 
 body[data-page="detail"] pre {
